@@ -1,0 +1,1 @@
+from .msg_endpoints import router as msg_router
