@@ -1,24 +1,15 @@
-import uvicorn
-import logging
 import threading
+import uvicorn
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse
+
 from api.routers import main_router
-from core.config import settings
+from core.config import settings, logger
 from kafka_client.producer import init_producer, get_producer
 from kafka_client.consumers import run_consumers
 from kafka_client.schemas import json_schema_str
-
-
-logging.basicConfig(
-    level=settings.log_level,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-
-
-logger = logging.getLogger(__name__)
 
 
 app = FastAPI(
@@ -50,9 +41,10 @@ app.state.kafka_consumers = None
 
 @app.on_event('startup')
 async def startup_event():
+    """Запуск сервиса Кафка."""
     logger.info('Запуск Kafka')
+    # Инициализация продюсера с передачей URL Schema Registry
     try:
-        # Инициализация продюсера с передачей URL Schema Registry
         init_producer(
             bootstrap_servers=settings.kafka_bootstrap_servers,
             topic=settings.kafka_topic,
@@ -60,8 +52,7 @@ async def startup_event():
         )
         logger.info('Kafka продюсер инициализирован')
     except Exception as e:
-        logger.error(f'Ошибка инициализации продюсера: {e}')
-    
+        logger.error('Ошибка инициализации продюсера: %s', e)
     # Запуск консьюмеров
     try:
         consumers_info = run_consumers(
@@ -72,16 +63,16 @@ async def startup_event():
             schema_registry_url=settings.kafka_schemaregistry_url,
             schema_str=json_schema_str
         )
-        
         # Сохраняем информацию о консьюмерах для возможного graceful shutdown
         app.state.kafka_consumers = consumers_info
         logger.info('Kafka консьюмеры успешно запущены')
     except Exception as e:
-        logger.error(f'Ошибка запуска консьюмеров: {e}')
-    
-    
+        logger.error('Ошибка запуска консьюмеров: %s', e)
+
+
 @app.on_event('shutdown')
 async def shutdown_event():
+    """Остановка сервиса Кафка."""
     logger.info('Завершение приложения Kafka')
     # Закрываем продюсер
     producer = get_producer()
@@ -90,7 +81,7 @@ async def shutdown_event():
             producer.close()
             logger.info('Kafka продюсер закрыт')
         except Exception as e:
-            logger.error(f'Ошибка закрытия продюсера: {e}')
+            logger.error('Ошибка закрытия продюсера: %s', e)
     # Фиксируем остановку консьюмеров
     if app.state.kafka_consumers:
         logger.info('Консьюмеры завершают работу')

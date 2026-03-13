@@ -3,7 +3,7 @@ set -e
 
 apt-get update && apt-get install -y default-jdk
 
-PASSWORD="changeit"
+PASSWORD="password"
 VALIDITY=365
 CA_CN="KafkaCA"
 CERT_DIR="/certs"
@@ -11,6 +11,13 @@ CERT_DIR="/certs"
 BROKERS=("kafka-kraft-1" "kafka-kraft-2" "kafka-kraft-3")
 
 mkdir -p "$CERT_DIR/client"
+
+# Если сертификаты уже сгенерированы — пропускаем
+if [ -f "$CERT_DIR/ca.keystore.jks" ] && [ -f "$CERT_DIR/ca-cert.pem" ]; then
+  echo "=== Сертификаты уже существуют, пропускаем генерацию ==="
+  ls -laR "$CERT_DIR"
+  exit 0
+fi
 
 echo "=== Генерация CA ==="
 keytool -genkeypair \
@@ -41,7 +48,7 @@ for BROKER in "${BROKERS[@]}"; do
     -alias "$BROKER" \
     -keyalg RSA \
     -keysize 2048 \
-    -keystore "$BROKER_DIR/server.keystore.jks" \
+    -keystore "$BROKER_DIR/kafka.keystore.jks" \
     -storepass "$PASSWORD" \
     -keypass "$PASSWORD" \
     -dname "CN=$BROKER" \
@@ -51,7 +58,7 @@ for BROKER in "${BROKERS[@]}"; do
   # 2. Создаём CSR
   keytool -certreq \
     -alias "$BROKER" \
-    -keystore "$BROKER_DIR/server.keystore.jks" \
+    -keystore "$BROKER_DIR/kafka.keystore.jks" \
     -storepass "$PASSWORD" \
     -file "$BROKER_DIR/server.csr"
 
@@ -69,7 +76,7 @@ for BROKER in "${BROKERS[@]}"; do
   # 4. Импортируем CA-сертификат в keystore брокера
   keytool -importcert \
     -alias ca \
-    -keystore "$BROKER_DIR/server.keystore.jks" \
+    -keystore "$BROKER_DIR/kafka.keystore.jks" \
     -storepass "$PASSWORD" \
     -file "$CERT_DIR/ca-cert.pem" \
     -noprompt
@@ -77,7 +84,7 @@ for BROKER in "${BROKERS[@]}"; do
   # 5. Импортируем подписанный сертификат
   keytool -importcert \
     -alias "$BROKER" \
-    -keystore "$BROKER_DIR/server.keystore.jks" \
+    -keystore "$BROKER_DIR/kafka.keystore.jks" \
     -storepass "$PASSWORD" \
     -file "$BROKER_DIR/server-signed.pem" \
     -noprompt
@@ -85,7 +92,7 @@ for BROKER in "${BROKERS[@]}"; do
   # 6. Создаём truststore брокера с CA-сертификатом
   keytool -importcert \
     -alias ca \
-    -keystore "$BROKER_DIR/server.truststore.jks" \
+    -keystore "$BROKER_DIR/kafka.truststore.jks" \
     -storepass "$PASSWORD" \
     -file "$CERT_DIR/ca-cert.pem" \
     -noprompt

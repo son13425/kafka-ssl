@@ -3,8 +3,6 @@ import { ref, computed, onUnmounted } from "vue";
 
 const URL_API = `${import.meta.env.VITE_API}`;
 
-// Практическая работа №1
-
 const dataTransmission = ref(false);
 const intervalMany = ref(null);
 const intervalOne = ref(null);
@@ -76,31 +74,12 @@ function sendOneMessage(keyMessage) {
     console.error("Ошибка в sendOneMessage(): ", error);
   }
 }
-
-// Практическая работа №2
-
-const dataTestTransmission = ref(false);
-const intervalTestMany = ref(null);
-const intervalTestkkOne = ref(null);
-
-const nameTestStatus = computed(() =>
-  dataTestTransmission.value
-    ? "Тестовые сообщения отправляются"
-    : "Тестовые сообщения не отправляютя",
-);
-const nameButtonTestTransmission = computed(() =>
-  dataTestTransmission.value
-    ? "Остановить тестовую переписку"
-    : "Включить тестовую переписку",
-);
-
-function setStatusTestTransmission() {}
 </script>
 
 <template>
   <div>
     <div>
-      <p>Практическая работа №1</p>
+      <p>Практическая работа №5</p>
       <p>
         Состояние отправки сообщений:
         <span
@@ -114,23 +93,6 @@ function setStatusTestTransmission() {}
       </p>
       <button @click="setStatusTransmission">
         {{ nameButtonTransmission }}
-      </button>
-    </div>
-    <div>
-      <p>Практическая работа №2</p>
-      <p>
-        Состояние отправки тестовых сообщений:
-        <span
-          :class="{
-            'status-test-transmission-active': dataTestTransmission === true,
-            'status-test-transmission-unactive': dataTestTransmission === false,
-          }"
-        >
-          {{ nameTestStatus }}
-        </span>
-      </p>
-      <button @click="setStatusTestTransmission">
-        {{ nameButtonTestTransmission }}
       </button>
     </div>
   </div>

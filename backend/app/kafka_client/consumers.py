@@ -2,17 +2,16 @@ from confluent_kafka import Consumer, KafkaError
 from confluent_kafka.schema_registry import SchemaRegistryClient
 from confluent_kafka.schema_registry.json_schema import JSONSerializer, JSONDeserializer
 from confluent_kafka.serialization import (
-    SerializationContext, 
+    SerializationContext,
     MessageField
 )
-import json
-import logging
 import threading
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from core.config import logger
+
 
 class SingleMessageConsumer:
+    """Консьюмер единичных сообщений."""
     def __init__(self, bootstrap_servers, topic, group_id, schema_registry_url, schema_str=None):
         self.config = {
             'bootstrap.servers': bootstrap_servers,
@@ -44,10 +43,15 @@ class SingleMessageConsumer:
                 )
                 logger.info(f"Схема получена из Schema Registry: {subject}")
             except Exception as e:
-                logger.error(f"Не удалось получить схему из Schema Registry: {e}")
+                logger.error(
+                    "Не удалось получить схему из Schema Registry: %s",
+                    e
+                )
                 raise
         self.consumer.subscribe([self.topic])
-        logger.info(f"SingleMessageConsumer запущен. Группа: {self.config['group.id']}")
+        logger.info(f"SingleMessageConsumer запущен. Группа: {
+            self.config['group.id']
+        }")
 
     def process_message(self, msg):
         try:
@@ -63,7 +67,7 @@ class SingleMessageConsumer:
             logger.info(f"Закоммичен оффсет: partition={msg.partition()}, offset={msg.offset()}")
 
         except Exception as e:
-            logger.error(f"Ошибка обработки сообщения: {e}")
+            logger.error("Ошибка обработки сообщения: %s", e)
 
     def run(self):
         try:
@@ -75,11 +79,11 @@ class SingleMessageConsumer:
                     if msg.error().code() == KafkaError._PARTITION_EOF:
                         continue
                     else:
-                        logger.error(f"Ошибка Kafka: {msg.error()}")
+                        logger.error("Ошибка Kafka: %s", msg.error())
                         continue
-                
+
                 self.process_message(msg)
-                
+
         except KeyboardInterrupt:
             logger.info("Остановка консьюмера...")
         finally:
@@ -87,6 +91,7 @@ class SingleMessageConsumer:
 
 
 class BatchMessageConsumer:
+    """Пакетный консьюмер."""
     def __init__(self, bootstrap_servers, topic, group_id, schema_registry_url, schema_str=None):
         self.config = {
             'bootstrap.servers': bootstrap_servers,
@@ -118,35 +123,39 @@ class BatchMessageConsumer:
                 )
                 logger.info(f"Схема получена из Schema Registry: {subject}")
             except Exception as e:
-                logger.error(f"Не удалось получить схему из Schema Registry: {e}")
+                logger.error(
+                    "Не удалось получить схему из Schema Registry: %s", e
+                )
                 raise
         self.consumer.subscribe([self.topic])
         self.batch_size = 10
-        logger.info(f"BatchMessageConsumer запущен. Группа: {self.config['group.id']}")
+        logger.info(f"BatchMessageConsumer запущен. Группа: {
+            self.config['group.id']
+        }")
 
     def process_batch(self, messages):
         if not messages:
             return
-            
+
         try:
             for msg in messages:
                 if msg.key() and msg.key().decode('utf-8') == 'many':
                     serialization_context = SerializationContext(self.topic, MessageField.VALUE)
                     value = self.json_deserializer(msg.value(), serialization_context)
                     logger.info(f"Обработка сообщения из пачки: key={msg.key()}, value={value}")
-            
+
             # КОММИТ ВСЕЙ ПАЧКИ ОДИН РАЗ
             self.consumer.commit(asynchronous=False)
             logger.info(f"Закоммичена пачка из {len(messages)} сообщений")
-            
+
         except Exception as e:
-            logger.error(f"Ошибка обработки пачки: {e}")
+            logger.error("Ошибка обработки пачки: %s", e)
 
     def run(self):
         try:
             while True:
                 messages = []
-                
+
                 # Собираем минимум batch_size сообщений
                 while len(messages) < self.batch_size:
                     msg = self.consumer.poll(timeout=1.0)
@@ -154,19 +163,19 @@ class BatchMessageConsumer:
                         if len(messages) > 0:
                             break  # Обрабатываем то, что накопили
                         continue
-                        
+
                     if msg.error():
                         if msg.error().code() == KafkaError._PARTITION_EOF:
                             continue
                         else:
                             logger.error(f"Ошибка Kafka: {msg.error()}")
                             continue
-                    
+
                     messages.append(msg)
-                
+
                 if messages:
                     self.process_batch(messages)
-                    
+
         except KeyboardInterrupt:
             logger.info("Остановка консьюмера...")
         finally:
@@ -180,15 +189,15 @@ def run_consumers(bootstrap_servers: str, topic: str, single_group_id: str, batc
     """
     single_consumer = SingleMessageConsumer(bootstrap_servers, topic, single_group_id, schema_registry_url, schema_str)
     batch_consumer = BatchMessageConsumer(bootstrap_servers, topic, batch_group_id, schema_registry_url, schema_str)
-    
+
     thread1 = threading.Thread(target=single_consumer.run, daemon=True, name="single-consumer")
     thread2 = threading.Thread(target=batch_consumer.run, daemon=True, name="batch-consumer")
-    
+
     thread1.start()
     thread2.start()
-    
+
     logger.info(f"Консьюмеры запущены. Topic: {topic}, Bootstrap: {bootstrap_servers}")
-    
+
     return {
         'threads': [thread1, thread2],
         'consumers': [single_consumer, batch_consumer]

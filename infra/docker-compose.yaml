@@ -38,27 +38,67 @@ services:
   kafka-kraft-1:
     image: bitnamilegacy/kafka:3.4
     container_name: kafka-kraft-1
+    user: root
     depends_on:
       cert-generator:
         condition: service_completed_successfully
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        echo "=== Содержимое /certs-source ==="
+        ls -laR /certs-source/
+        mkdir -p /bitnami/kafka/config/certs
+        if [ -f /certs-source/kafka.keystore.jks ]; then
+          cp /certs-source/kafka.keystore.jks /bitnami/kafka/config/certs/
+          cp /certs-source/kafka.truststore.jks /bitnami/kafka/config/certs/
+        elif [ -f /certs-source/kafka-kraft-1/kafka.keystore.jks ]; then
+          cp /certs-source/kafka-kraft-1/kafka.keystore.jks /bitnami/kafka/config/certs/
+          cp /certs-source/kafka-kraft-1/kafka.truststore.jks /bitnami/kafka/config/certs/
+        else
+          echo "ERROR: keystore not found in /certs-source"
+          ls -laR /certs-source/
+          exit 1
+        fi
+        chmod 644 /bitnami/kafka/config/certs/*
+        chown -R 1001:root /bitnami/kafka/config/certs
+        echo "=== Certs copied ==="
+        ls -la /bitnami/kafka/config/certs/
+        exec /opt/bitnami/scripts/kafka/entrypoint.sh /opt/bitnami/scripts/kafka/run.sh
     environment:
-      # Настройки ноды 1
       - KAFKA_CFG_NODE_ID=1
-      # Listeners
       - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9095,SSL://:9094
       - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka-kraft-1:9092,EXTERNAL://kafka-kraft-1:9095,SSL://kafka-kraft-1:9094
     env_file:
       - .env.kafka
     volumes:
       - kraft1_data:/bitnami/kafka
-      - ./certs/kafka/kafka-kraft-1:/opt/kafka/certs:ro
+      - ./certs/kafka:/certs-source:ro
 
   kafka-kraft-2:
     image: bitnamilegacy/kafka:3.4
     container_name: kafka-kraft-2
+    user: root
     depends_on:
       cert-generator:
         condition: service_completed_successfully
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        mkdir -p /bitnami/kafka/config/certs
+        if [ -f /certs-source/kafka.keystore.jks ]; then
+          cp /certs-source/kafka.keystore.jks /bitnami/kafka/config/certs/
+          cp /certs-source/kafka.truststore.jks /bitnami/kafka/config/certs/
+        elif [ -f /certs-source/kafka-kraft-2/kafka.keystore.jks ]; then
+          cp /certs-source/kafka-kraft-2/kafka.keystore.jks /bitnami/kafka/config/certs/
+          cp /certs-source/kafka-kraft-2/kafka.truststore.jks /bitnami/kafka/config/certs/
+        else
+          echo "ERROR: keystore not found"
+          ls -laR /certs-source/
+          exit 1
+        fi
+        chmod 644 /bitnami/kafka/config/certs/*
+        chown -R 1001:root /bitnami/kafka/config/certs
+        exec /opt/bitnami/scripts/kafka/entrypoint.sh /opt/bitnami/scripts/kafka/run.sh
     environment:
       - KAFKA_CFG_NODE_ID=2
       - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9096,SSL://:9094
@@ -67,14 +107,33 @@ services:
       - .env.kafka
     volumes:
       - kraft2_data:/bitnami/kafka
-      - ./certs/kafka/kafka-kraft-2:/opt/kafka/certs:ro
+      - ./certs/kafka:/certs-source:ro
 
   kafka-kraft-3:
     image: bitnamilegacy/kafka:3.4
     container_name: kafka-kraft-3
+    user: root
     depends_on:
       cert-generator:
         condition: service_completed_successfully
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        mkdir -p /bitnami/kafka/config/certs
+        if [ -f /certs-source/kafka.keystore.jks ]; then
+          cp /certs-source/kafka.keystore.jks /bitnami/kafka/config/certs/
+          cp /certs-source/kafka.truststore.jks /bitnami/kafka/config/certs/
+        elif [ -f /certs-source/kafka-kraft-3/kafka.keystore.jks ]; then
+          cp /certs-source/kafka-kraft-3/kafka.keystore.jks /bitnami/kafka/config/certs/
+          cp /certs-source/kafka-kraft-3/kafka.truststore.jks /bitnami/kafka/config/certs/
+        else
+          echo "ERROR: keystore not found"
+          ls -laR /certs-source/
+          exit 1
+        fi
+        chmod 644 /bitnami/kafka/config/certs/*
+        chown -R 1001:root /bitnami/kafka/config/certs
+        exec /opt/bitnami/scripts/kafka/entrypoint.sh /opt/bitnami/scripts/kafka/run.sh
     environment:
       - KAFKA_CFG_NODE_ID=3
       - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9097,SSL://:9094
@@ -83,7 +142,7 @@ services:
       - .env.kafka
     volumes:
       - kraft3_data:/bitnami/kafka
-      - ./certs/kafka/kafka-kraft-3:/opt/kafka/certs:ro
+      - ./certs/kafka:/certs-source:ro
 
   schema-registry:
     image: confluentinc/cp-schema-registry:latest
@@ -124,13 +183,10 @@ services:
       - kafka-ui-kraft
 
   cert-generator:
-    image: ubuntu:22.04
+    build: ./scripts
     container_name: cert-generator
     volumes:
       - ./certs/kafka:/certs
-      - ./scripts/generate-certs.sh:/generate-certs.sh
-    entrypoint: ["/bin/bash", "/generate-certs.sh"]
-
 
 volumes:
   kraft1_data:

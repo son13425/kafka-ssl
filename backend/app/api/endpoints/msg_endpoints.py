@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 
+from core.config import logger
 from schemas.msg_schema import (OutgoingMessageSchema,
                                 IncomingMessageSchema)
 from kafka_client.producer import get_producer
@@ -15,11 +16,15 @@ router = APIRouter()
 )
 async def receiving_message(
     data_msg: IncomingMessageSchema
-):
-
-    print(f"Получено сообщение от клиента: key={data_msg.key}, msg={data_msg.msg}")
+):  
+    """Получает сообщение и отправляет его в Kafka."""
+    logger.info(
+        f"Получено сообщение от клиента: key={data_msg.key}, "
+        f"msg={data_msg.msg}"
+    )
     producer = get_producer()
     if not producer:
+        logger.info("Kafka-продюсер не инициализирован")
         raise HTTPException(
             status_code=500,
             detail="Kafka-продюсер не инициализирован"
@@ -29,6 +34,7 @@ async def receiving_message(
         message=data_msg.msg
     )
     if not success:
+        logger.info("Ошибка при отправке сообщения в Kafka")
         raise HTTPException(
             status_code=500,
             detail="Ошибка при отправке сообщения в Kafka"

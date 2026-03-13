@@ -1,3 +1,5 @@
+"""Настройки приложения."""
+import logging
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -7,6 +9,7 @@ ENV_PATH = BASE_DIR / '.env.backend'
 
 
 class Settings(BaseSettings):
+    """Настройки приложения."""
     name: str
     host: str
     port: int
@@ -24,3 +27,12 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+logging.basicConfig(
+    level=settings.log_level,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+
+logger = logging.getLogger(__name__)
