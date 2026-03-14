@@ -3,10 +3,14 @@ services:
   backend1:
     build: ../backend
     container_name: backend1
+    depends_on:
+      kafka-acl-init:
+        condition: service_completed_successfully
     command: uvicorn main:app --host 0.0.0.0 --port 8800 --reload
     volumes:
       - ../backend:/app
       - ./files:/app/files
+      - ./certs/kafka/ca-cert.pem:/app/certs/ca-cert.pem:ro
     env_file:
       - ../backend/.env.backend
     working_dir: /app/app
@@ -14,10 +18,14 @@ services:
   backend2:
     build: ../backend
     container_name: backend2
+    depends_on:
+      kafka-acl-init:
+        condition: service_completed_successfully
     command: uvicorn main:app --host 0.0.0.0 --port 8800 --reload
     volumes:
       - ../backend:/app
       - ./files:/app/files
+      - ./certs/kafka/ca-cert.pem:/app/certs/ca-cert.pem:ro
     env_file:
       - ../backend/.env.backend
     working_dir: /app/app
@@ -66,8 +74,8 @@ services:
         exec /opt/bitnami/scripts/kafka/entrypoint.sh /opt/bitnami/scripts/kafka/run.sh
     environment:
       - KAFKA_CFG_NODE_ID=1
-      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9095,SSL://:9094
-      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka-kraft-1:9092,EXTERNAL://kafka-kraft-1:9095,SSL://kafka-kraft-1:9094
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9095,SSL://:9094,SASL_SSL://:9098
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka-kraft-1:9092,EXTERNAL://kafka-kraft-1:9095,SSL://kafka-kraft-1:9094,SASL_SSL://kafka-kraft-1:9098
     env_file:
       - .env.kafka
     volumes:
@@ -101,8 +109,8 @@ services:
         exec /opt/bitnami/scripts/kafka/entrypoint.sh /opt/bitnami/scripts/kafka/run.sh
     environment:
       - KAFKA_CFG_NODE_ID=2
-      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9096,SSL://:9094
-      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka-kraft-2:9092,EXTERNAL://kafka-kraft-2:9096,SSL://kafka-kraft-2:9094
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9096,SSL://:9094,SASL_SSL://:9098
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka-kraft-2:9092,EXTERNAL://kafka-kraft-2:9096,SSL://kafka-kraft-2:9094,SASL_SSL://kafka-kraft-2:9098
     env_file:
       - .env.kafka
     volumes:
@@ -136,8 +144,8 @@ services:
         exec /opt/bitnami/scripts/kafka/entrypoint.sh /opt/bitnami/scripts/kafka/run.sh
     environment:
       - KAFKA_CFG_NODE_ID=3
-      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9097,SSL://:9094
-      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka-kraft-3:9092,EXTERNAL://kafka-kraft-3:9097,SSL://kafka-kraft-3:9094
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9097,SSL://:9094,SASL_SSL://:9098
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka-kraft-3:9092,EXTERNAL://kafka-kraft-3:9097,SSL://kafka-kraft-3:9094,SASL_SSL://kafka-kraft-3:9098
     env_file:
       - .env.kafka
     volumes:
@@ -152,6 +160,8 @@ services:
       - kafka-kraft-2
       - kafka-kraft-3
     restart: unless-stopped
+    volumes:
+      - ./certs/kafka:/certs:ro
     env_file:
       - .env.kafka
 
@@ -164,6 +174,8 @@ services:
       - kafka-kraft-2
       - kafka-kraft-3
       - schema-registry
+    volumes:
+      - ./certs/kafka:/certs:ro
     env_file:
       - .env.kafka
 
@@ -187,6 +199,19 @@ services:
     container_name: cert-generator
     volumes:
       - ./certs/kafka:/certs
+
+  kafka-acl-init:
+    image: bitnamilegacy/kafka:3.4
+    container_name: kafka-acl-init
+    depends_on:
+      - kafka-kraft-1
+      - kafka-kraft-2
+      - kafka-kraft-3
+    entrypoint: ["/bin/bash", "/scripts/kafka-acl-init.sh"]
+    volumes:
+      - ./certs/kafka:/certs-source:ro
+      - ./scripts/kafka-acl-init.sh:/scripts/kafka-acl-init.sh:ro
+    restart: "no"
 
 volumes:
   kraft1_data:

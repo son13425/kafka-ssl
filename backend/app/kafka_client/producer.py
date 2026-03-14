@@ -1,7 +1,7 @@
 """Продюсер кафка."""
 from datetime import datetime
 import uuid
-from typing import Optional
+from typing import Optional, Iterable
 
 from confluent_kafka import Producer
 from confluent_kafka.serialization import (
@@ -20,14 +20,13 @@ class MessageProducer:
     def __init__(
             self,
             bootstrap_servers: str,
-            topic: str,
-            schema_registry_url: str
+            schema_registry_url: str,
+            conf_extra: dict
     ):
         """
         Инициализация продюсера с поддержкой Schema Registry
         """
         self.bootstrap_servers = bootstrap_servers
-        self.topic = topic
 
         # Инициализация Schema Registry Client
         schema_registry_conf = {'url': schema_registry_url}
@@ -48,7 +47,8 @@ class MessageProducer:
             'acks': 'all',
             'retries': 3,
             'enable.idempotence': True,
-            'compression.type': 'gzip'
+            'compression.type': 'gzip',
+            **conf_extra
         }
 
         self.producer = Producer(conf)
@@ -56,36 +56,35 @@ class MessageProducer:
     def delivery_callback(self, err, msg):
         """Callback для отслеживания доставки сообщений"""
         if err:
-            logger.error(f'Ошибка доставки сообщения: {err}')
-            print(f"Ошибка доставки: {err}")
+            logger.error('Ошибка доставки сообщения: %s', err)
         else:
             logger.info(
-                f'Сообщение доставлено в {msg.topic()} [{msg.partition()}]'
-            )
-            print(
-                f"Сообщение доставлено: topic={msg.topic()}, "
-                f"partition={msg.partition()}, offset={msg.offset()}"
+                'Сообщение доставлено: topic=%s partition=%s offset=%s',
+                msg.topic(), msg.partition(), msg.offset()
             )
 
-    def send_message(self, key: str, message: str) -> bool:
+    def _build_value(self, key: str, message: str) -> dict:
+        """Создание структурированного сообщения."""
+        return {
+            'id': str(uuid.uuid4()),
+            'timestamp': datetime.now().isoformat(),
+            'key': key,
+            'msg': message
+        }
+
+    def send_message(self, topic: str, key: str, message: str) -> bool:
         """
-        Отправка сообщения в Kafka с использованием Schema Registry
+        Отправка одиночного сообщения в Kafka с использованием Schema Registry
         """
         try:
-            # Создание структурированного сообщения
-            message_value = {
-                'id': str(uuid.uuid4()),
-                'timestamp': datetime.now().isoformat(),
-                'key': key,
-                'msg': message
-            }
+            message_value = self._build_value(key, message)
 
-            print(f"Отправка сообщения в Kafka: {message_value}")
+            logger.error('Отправка сообщения в Kafka: %s', message_value)
 
             # Сериализация значения с использованием Schema Registry
             serialized_value = self.json_serializer(
                 message_value,
-                SerializationContext(self.topic, MessageField.VALUE)
+                SerializationContext(topic, MessageField.VALUE)
             )
 
             # Сериализация ключа (просто строку в bytes)
@@ -93,7 +92,7 @@ class MessageProducer:
 
             # Отправка сообщения
             self.producer.produce(
-                topic=self.topic,
+                topic=topic,
                 key=serialized_key,
                 value=serialized_value,
                 callback=self.delivery_callback
@@ -108,16 +107,45 @@ class MessageProducer:
             return True
 
         except Exception as e:
-            logger.error(f"Ошибка при отправке сообщения в Kafka: {e}")
-            print(f"Ошибка при отправке: {e}")
+            logger.error('Ошибка при отправке сообщения в Kafka: %s', e)
+            return False
+
+    def send_batch(self, topic: str, items: Iterable[dict]) -> bool:
+        """
+        Отправка пакета сообщений в Kafka с использованием Schema Registry
+        """
+        try:
+            for item in items:
+                key = item.get("key")
+                msg = item.get("msg")
+                value = self._build_value(key=key, message=msg)
+
+                serialized_value = self.json_serializer(
+                    value,
+                    SerializationContext(topic, MessageField.VALUE)
+                )
+                serialized_key = key.encode('utf-8') if key else None
+
+                self.producer.produce(
+                    topic=topic,
+                    key=serialized_key,
+                    value=serialized_value,
+                    callback=self.delivery_callback
+                )
+                self.producer.poll(0)
+
+            self.producer.flush(timeout=10)
+            return True
+        except Exception as e:
+            logger.error("Ошибка пакетной отправки в Kafka: %s", e)
             return False
 
     def close(self):
-        """Закрытие продюсера"""
+        """Закрытие продюсера."""
         try:
             self.producer.flush(timeout=10)
         except Exception as e:
-            logger.error(f"Ошибка при закрытии продюсера: {e}")
+            logger.error('Ошибка при закрытии продюсера: %s', e)
 
 
 # Глобальный экземпляр продюсера
@@ -126,16 +154,16 @@ producer_instance: Optional[MessageProducer] = None
 
 def init_producer(
     bootstrap_servers: str,
-    topic: str,
-    schema_registry_url: str
+    schema_registry_url: str,
+    conf_extra: dict
 ) -> MessageProducer:
-    """Инициализация глобального продюсера"""
+    """Инициализация глобального продюсера."""
     global producer_instance
     if producer_instance is None:
         producer_instance = MessageProducer(
             bootstrap_servers,
-            topic,
-            schema_registry_url
+            schema_registry_url,
+            conf_extra
         )
     return producer_instance
 

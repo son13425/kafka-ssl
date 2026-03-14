@@ -6,6 +6,7 @@ const URL_API = `${import.meta.env.VITE_API}`;
 const dataTransmission = ref(false);
 const intervalMany = ref(null);
 const intervalOne = ref(null);
+const manyBuffer = ref([]);
 
 const nameStatus = computed(() =>
   dataTransmission.value
@@ -27,13 +28,13 @@ function setStatusTransmission() {
   dataTransmission.value = !dataTransmission.value;
   if (dataTransmission.value) {
     intervalMany.value = setInterval(() => {
-      sendOneMessage("many");
+      sendManyMessage();
     }, 1000);
     intervalOne.value = setInterval(() => {
-      sendOneMessage("one");
+      sendOneMessage();
     }, 10000);
-    sendOneMessage("many");
-    sendOneMessage("one");
+    sendManyMessage();
+    sendOneMessage();
   } else {
     if (intervalMany.value) {
       clearInterval(intervalMany.value);
@@ -46,16 +47,45 @@ function setStatusTransmission() {
   }
 }
 
-function sendOneMessage(keyMessage) {
-  const textMsg =
-    keyMessage === "one" ? "Одиночное сообщение" : "Пакетное сообщение";
+function sendManyMessage() {
+  const indexInBatch = manyBuffer.value.length + 1; // 1..10
+  manyBuffer.value.push({
+    key: "many",
+    msg: `Пакетное сообщение номер ${indexInBatch}`,
+  });
+
+  if (manyBuffer.value.length === 10) {
+    const batch = [...manyBuffer.value];
+    manyBuffer.value = [];
+    fetch(`${URL_API}/messages/batch`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(batch),
+    })
+      .then((response) => {
+        if (response.ok) {
+          return response.json().then((res) => {
+            console.log(`Пакет из ${batch.length} сообщений отправлен!`);
+            console.log(res.msg);
+          });
+        } else {
+          console.error("Ошибка отправки пакетных сообщений:", response.status);
+        }
+      })
+      .catch((err) => {
+        console.error("Ошибка сети (batch):", err);
+      });
+  }
+}
+
+function sendOneMessage() {
   const currentDate = new Date();
   const isoDate = currentDate.toISOString();
   try {
     fetch(`${URL_API}/message`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ key: keyMessage, msg: `${isoDate}: ${textMsg}` }),
+      body: JSON.stringify({ key: "one", msg: `${isoDate}: Одиночное сообщение` }),
     })
       .then((response) => {
         if (response.ok) {
